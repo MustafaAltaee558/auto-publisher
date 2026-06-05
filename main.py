@@ -1,7 +1,8 @@
 import os
 import asyncio
 import httpx
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 import logging
@@ -18,7 +19,7 @@ MAKE_WEBHOOK_URL = os.environ["MAKE_WEBHOOK_URL"]
 TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 TELEGRAM_FILE_API = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}"
 
-genai.configure(api_key=GEMINI_API_KEY)
+gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
 
 # ─── Telegram helpers ────────────────────────────────────────────────────────
@@ -62,8 +63,6 @@ SYSTEM_PROMPT = """أنت خبير تسويق محتوى متخصص في تسو�
 
 
 async def generate_marketing_text(media_bytes: bytes, mime_type: str, platform: str) -> str:
-    model = genai.GenerativeModel("gemini-2.0-flash")
-
     platform_hint = PLATFORM_HINTS.get(platform, PLATFORM_HINTS["facebook"])
     hashtags = _hashtags_for(platform)
 
@@ -78,8 +77,13 @@ async def generate_marketing_text(media_bytes: bytes, mime_type: str, platform: 
 - أضف هذه الهاشتاقات في نهاية النص:
 {hashtags}"""
 
-    image_part = {"mime_type": mime_type, "data": media_bytes}
-    response = model.generate_content([prompt, image_part])
+    response = gemini_client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=[
+            types.Part.from_bytes(data=media_bytes, mime_type=mime_type),
+            prompt,
+        ],
+    )
     return response.text.strip()
 
 
