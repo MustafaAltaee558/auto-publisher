@@ -98,15 +98,23 @@ def _hashtags_for(platform: str) -> str:
 async def send_to_make(chat_id: int, file_url: str, media_type: str, texts: dict):
     payload = {
         "chat_id": chat_id,
-        "media_url": file_url,
-        "media_type": media_type,          # "photo" | "video"
+        "file_url": file_url,
         "facebook_text": texts["facebook"],
         "instagram_text": texts["instagram"],
-        "tiktok_text": texts["tiktok"],
     }
+
+    logger.info("📤 إرسال للـ Make Webhook...")
+    logger.info(f"   URL: {MAKE_WEBHOOK_URL}")
+    logger.info(f"   chat_id: {chat_id}")
+    logger.info(f"   file_url: {file_url}")
+    logger.info(f"   facebook_text: {texts['facebook'][:80]}...")
+    logger.info(f"   instagram_text: {texts['instagram'][:80]}...")
+
     async with httpx.AsyncClient(timeout=30) as client:
         r = await client.post(MAKE_WEBHOOK_URL, json=payload)
+        logger.info(f"📥 رد Make — status: {r.status_code} | body: {r.text[:200]}")
         r.raise_for_status()
+
     logger.info("✅ تم الإرسال لـ Make بنجاح")
 
 
