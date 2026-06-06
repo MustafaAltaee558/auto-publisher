@@ -1,8 +1,8 @@
 import os
 import asyncio
-import base64
 import httpx
-from openai import AsyncOpenAI
+from google import genai
+from google.genai import types
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 import logging
@@ -13,13 +13,13 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="شفرة السكينة - نظام النشر التلقائي")
 
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
-OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 MAKE_WEBHOOK_URL = os.environ["MAKE_WEBHOOK_URL"]
 
 TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 TELEGRAM_FILE_API = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}"
 
-openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
 
 # ─── Telegram helpers ────────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ async def download_bytes(url: str) -> bytes:
         return r.content
 
 
-# ─── OpenAI ───────────────────────────────────────────────────────────────────
+# ─── Gemini AI ────────────────────────────────────────────────────────────────
 
 PLATFORM_HINTS = {
     "facebook": "منشور فيسبوك طويل نسبياً (150-250 كلمة)، يبدأ بسؤال أو عبارة تشويقية",
@@ -66,7 +66,9 @@ async def generate_marketing_text(media_bytes: bytes, mime_type: str, platform: 
     platform_hint = PLATFORM_HINTS.get(platform, PLATFORM_HINTS["facebook"])
     hashtags = _hashtags_for(platform)
 
-    prompt = f"""بناءً على الصورة المرفقة، اكتب نصاً تسويقياً احترافياً لكتاب "شفرة السكينة".
+    prompt = f"""{SYSTEM_PROMPT}
+
+بناءً على الصورة/الفيديو المرفق، اكتب نصاً تسويقياً احترافياً لكتاب "شفرة السكينة".
 المنصة المستهدفة: {platform.upper()} — {platform_hint}.
 
 الشروط:
@@ -75,26 +77,14 @@ async def generate_marketing_text(media_bytes: bytes, mime_type: str, platform: 
 - أضف هذه الهاشتاقات في نهاية النص:
 {hashtags}"""
 
-    image_b64 = base64.b64encode(media_bytes).decode("utf-8")
-
-    response = await openai_client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:{mime_type};base64,{image_b64}"},
-                    },
-                    {"type": "text", "text": prompt},
-                ],
-            },
+    response = gemini_client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=[
+            types.Part.from_bytes(data=media_bytes, mime_type=mime_type),
+            prompt,
         ],
-        max_tokens=1000,
     )
-    return response.choices[0].message.content.strip()
+    return response.text.strip()
 
 
 def _hashtags_for(platform: str) -> str:
